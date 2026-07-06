@@ -12,15 +12,21 @@ WORKDIR /app
 COPY requirements-api.txt .
 RUN pip install --no-cache-dir -r requirements-api.txt
 
-# application code + model definitions
-COPY detect.py app.py ./
-COPY models/ ./models/
+# non-root runtime user — the app runs unprivileged
+RUN useradd --system --uid 10001 --create-home appuser
 
-# pretrained weights, baked in (~1.2 GB). To keep the image slim instead,
-# drop these two COPY lines and mount the dir at runtime:
+# Layers ordered least -> most likely to change, so the cache survives code edits.
+# Weights first (~1.2 GB, rarely change). To slim the image instead, drop these
+# two COPY lines and mount the dir at runtime:
 #   -v /opt/mvss/ckpt:/app/ckpt/mvssnet_model
-COPY ckpt/mvssnet_model/mvssnet_casia.pt   ckpt/mvssnet_model/mvssnet_casia.pt
-COPY ckpt/mvssnet_model/mvssnet_defacto.pt ckpt/mvssnet_model/mvssnet_defacto.pt
+COPY --chown=appuser:appuser ckpt/mvssnet_model/mvssnet_casia.pt   ckpt/mvssnet_model/mvssnet_casia.pt
+COPY --chown=appuser:appuser ckpt/mvssnet_model/mvssnet_defacto.pt ckpt/mvssnet_model/mvssnet_defacto.pt
+
+# model definitions, then app code (changes most often) last
+COPY --chown=appuser:appuser models/ ./models/
+COPY --chown=appuser:appuser detect.py app.py ./
+
+USER appuser
 
 ENV MVSS_DEVICE=cpu \
     PYTHONUNBUFFERED=1

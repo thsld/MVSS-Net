@@ -73,8 +73,10 @@ def gather_images(paths):
     out = []
     for p in paths:
         if os.path.isdir(p):
-            for ext in IMG_EXTS:
-                out += glob.glob(os.path.join(p, "**", "*" + ext), recursive=True)
+            # match extensions case-insensitively (.JPG etc. on case-sensitive FS)
+            for f in glob.glob(os.path.join(p, "**", "*"), recursive=True):
+                if f.lower().endswith(IMG_EXTS):
+                    out.append(f)
         else:
             out.append(p)
     return sorted(out)
@@ -124,7 +126,14 @@ def main():
             x = preprocess(img, args.resize).to(device)
             _, seg = model(x)
             seg = torch.sigmoid(seg).squeeze().float().cpu().numpy()  # HxW in [0,1]
-            score = 0.0 if (np.isnan(seg).any() or np.isinf(seg).any()) else float(seg.max())
+            if np.isnan(seg).any() or np.isinf(seg).any():
+                # Numerical corruption: don't silently report "authentic".
+                print("  [WARN] NaN/Inf in model output for %s — detector failed; "
+                      "score forced to 0.0 and is NOT reliable" % path,
+                      file=sys.stderr)
+                score = 0.0
+            else:
+                score = float(seg.max())
 
             mask = (seg * 255).astype(np.uint8)
             mask = cv2.resize(mask, (w, h))

@@ -24,11 +24,13 @@ Response:
       "manipulated": true,
       "score": 0.81,
       "threshold": 0.5,
+      "degraded": false,        # true => a model output NaN/Inf; result unreliable
       "models": {"casia": 0.81, "defacto": 0.97}
     }
 """
 import hmac
 import io
+import logging
 import os
 
 import cv2
@@ -53,6 +55,7 @@ CKPTS = {
 
 app = FastAPI(title="MVSS-Net tamper detection")
 _models = {}
+logger = logging.getLogger("mvss")
 
 
 def require_api_key(x_api_key: str = Header(None)):
@@ -94,20 +97,29 @@ def _load():
               "Set it before exposing this service publicly.")
 
 
-def _score(img_bgr) -> dict:
+def _score(img_bgr):
+    """Return (scores_by_model, degraded_models).
+
+    `degraded_models` lists any model whose output was numerically corrupt
+    (NaN/Inf); its score is forced to 0.0 and must NOT be trusted.
+    """
     img = cv2.resize(img_bgr, (RESIZE, RESIZE))
     x = (img.astype(np.float32) / 255.0 - MEAN) / STD
     x = torch.from_numpy(x).permute(2, 0, 1).unsqueeze(0).to(DEVICE)
-    out = {}
+    out, degraded = {}, []
     with torch.no_grad():
         for name, model in _models.items():
             _, seg = model(x)
             seg = torch.sigmoid(seg)
             if torch.isnan(seg).any() or torch.isinf(seg).any():
+                # Numerical corruption: don't silently report "authentic".
+                logger.warning("NaN/Inf in %s model output — detector failed; "
+                               "score forced to 0.0 and is NOT reliable", name)
                 out[name] = 0.0
+                degraded.append(name)
             else:
                 out[name] = round(float(seg.max()), 4)
-    return out
+    return out, degraded
 
 
 @app.get("/health")
@@ -126,11 +138,12 @@ async def detect(
     if img is None:
         raise HTTPException(status_code=400, detail="Could not decode image")
 
-    scores = _score(img)
+    scores, degraded = _score(img)
     decisive = max(scores.values())  # flag if EITHER model crosses the line
     return {
         "manipulated": bool(decisive >= threshold),
         "score": decisive,
         "threshold": threshold,
+        "degraded": bool(degraded),  # true => a model failed; result unreliable
         "models": scores,
     }

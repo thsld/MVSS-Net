@@ -143,8 +143,11 @@ Expected:
 
 ## 5. Redeploying (the rare case)
 
-Weights don't change, so you **never re-copy them**. Docker's layer cache reuses
-the Torch install layer, so only changed code re-copies — rebuilds take seconds.
+The Dockerfile copies the weights **before** the app code, so a code-only change
+reuses the cached Torch-install and weight layers — only the small code layer
+rebuilds. Note that `docker build` still re-sends the build context (including
+the ~1.2 GB checkpoints) to the daemon each time, so a rebuild is quick but not
+instant.
 
 ```bash
 ssh $SERVER 'cd app && git pull && docker build -t id-tamper:latest . \

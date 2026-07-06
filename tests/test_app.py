@@ -116,17 +116,24 @@ class TestScore:
         # seg all zeros -> sigmoid 0.5 -> max 0.5
         monkeypatch.setattr(appmod, "_models", {"casia": _DummyModel(fill=0.0)})
         img = np.zeros((20, 30, 3), dtype=np.uint8)
-        assert appmod._score(img) == {"casia": 0.5}
+        scores, degraded = appmod._score(img)
+        assert scores == {"casia": 0.5}
+        assert degraded == []
 
     def test_high_logit_scores_near_one(self, monkeypatch):
         monkeypatch.setattr(appmod, "_models", {"casia": _DummyModel(fill=20.0)})
         img = np.zeros((20, 30, 3), dtype=np.uint8)
-        assert appmod._score(img)["casia"] == pytest.approx(1.0, abs=1e-3)
+        scores, _ = appmod._score(img)
+        assert scores["casia"] == pytest.approx(1.0, abs=1e-3)
 
-    def test_nan_guarded_to_zero(self, monkeypatch):
+    def test_nan_guarded_to_zero_and_warns(self, monkeypatch, caplog):
         monkeypatch.setattr(appmod, "_models", {"casia": _DummyModel(fill=float("nan"))})
         img = np.zeros((20, 30, 3), dtype=np.uint8)
-        assert appmod._score(img) == {"casia": 0.0}
+        with caplog.at_level("WARNING", logger="mvss"):
+            scores, degraded = appmod._score(img)
+        assert scores == {"casia": 0.0}
+        assert degraded == ["casia"]
+        assert any("NaN/Inf" in r.message for r in caplog.records)
 
     def test_multiple_models_all_scored(self, monkeypatch):
         monkeypatch.setattr(
@@ -135,10 +142,11 @@ class TestScore:
             {"casia": _DummyModel(fill=0.0), "defacto": _DummyModel(fill=20.0)},
         )
         img = np.zeros((20, 30, 3), dtype=np.uint8)
-        out = appmod._score(img)
+        out, degraded = appmod._score(img)
         assert set(out) == {"casia", "defacto"}
         assert out["casia"] == 0.5
         assert out["defacto"] == pytest.approx(1.0, abs=1e-3)
+        assert degraded == []
 
 
 # --------------------------------------------------------------------------- #
@@ -174,7 +182,25 @@ class TestEndpoints:
         assert body["score"] == 0.5
         assert body["threshold"] == 0.5
         assert body["manipulated"] is True
+        assert body["degraded"] is False
         assert set(body["models"]) == {"casia", "defacto"}
+
+    def test_detect_degraded_flag_on_nan(self, client, monkeypatch):
+        # a model that emits NaN -> degraded True, but response still returned
+        monkeypatch.setattr(
+            appmod,
+            "_models",
+            {"casia": _DummyModel(fill=float("nan")), "defacto": _DummyModel(fill=0.0)},
+        )
+        r = client.post(
+            "/detect",
+            headers={"X-API-Key": "testsecret"},
+            files={"file": ("x.png", _png_bytes(), "image/png")},
+        )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["degraded"] is True
+        assert body["models"]["casia"] == 0.0
 
     def test_detect_threshold_query_respected(self, client):
         r = client.post(
