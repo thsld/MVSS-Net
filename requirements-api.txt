@@ -1,0 +1,14 @@
+# Runtime deps for the tamper-detection API (CPU-only, Linux/Hetzner).
+# CPU wheels only — no CUDA, keeps the image small and needs no GPU.
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+torch==2.12.1
+torchvision==0.27.1
+numpy==2.4.6
+
+# headless OpenCV = no GUI/X11 libs, correct for a server
+opencv-python-headless>=4.13,<4.14
+
+fastapi==0.137.2
+uvicorn[standard]==0.49.0
+python-multipart>=0.0.9

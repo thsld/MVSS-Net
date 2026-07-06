@@ -1,0 +1,18 @@
+.git
+.gitignore
+.venv
+**/__pycache__
+*.pyc
+.DS_Store
+
+# local data & generated output — never send to the build (PII)
+ids/
+out/
+out_*/
+
+# docs / notebooks not needed at runtime
+demo.ipynb
+*.md
+
+# NOTE: ckpt/mvssnet_model/ is intentionally NOT ignored — the Dockerfile
+# COPYs the two .pt checkpoints from it at build time.
