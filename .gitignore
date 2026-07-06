@@ -257,3 +257,6 @@ ckpt/mvssnet_model/
 # python env
 .venv/
 __pycache__/
+# private local notes / secrets — never commit
+*.local.md
+*.local
