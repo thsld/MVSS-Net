@@ -5,7 +5,9 @@ set -e
 
 if [ -n "$CF_TUNNEL_TOKEN" ]; then
     echo "starting cloudflared tunnel connector ..."
-    cloudflared tunnel --no-autoupdate run --token "$CF_TUNNEL_TOKEN" &
+    # --protocol http2: use TCP (not QUIC/UDP) — many cloud/container networks
+    #   (e.g. RunPod) block the UDP that cloudflared's default QUIC needs.
+    cloudflared tunnel --no-autoupdate --protocol http2 run --token "$CF_TUNNEL_TOKEN" &
 fi
 
 exec uvicorn app:app --host 0.0.0.0 --port 8000
