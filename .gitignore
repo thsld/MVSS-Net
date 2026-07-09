@@ -246,3 +246,17 @@ TSWLatexianTemp*
 
 .DS_Store
 main.pdf
+
+## RentEngine service — do not commit
+# local data & outputs (contain PII — real IDs)
+ids/
+out/
+out_*/
+# model weights (large binaries — baked into image / hosted externally)
+ckpt/mvssnet_model/
+# python env
+.venv/
+__pycache__/
+# private local notes / secrets — never commit
+*.local.md
+*.local
