@@ -32,6 +32,8 @@ STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 def pick_device(requested):
     if requested != "auto":
         return torch.device(requested)
+    if torch.cuda.is_available():
+        return torch.device("cuda")
     if torch.backends.mps.is_available():
         return torch.device("mps")
     return torch.device("cpu")
